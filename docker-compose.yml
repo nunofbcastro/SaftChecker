@@ -1,0 +1,11 @@
+services:
+  saft-checker:
+    build: .
+    container_name: saft-checker
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

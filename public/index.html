@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SAFT Checker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="backdrop"></div>
+    <main class="shell">
+      <header class="hero">
+        <p class="kicker">Validador interno</p>
+        <h1>SAFT Checker</h1>
+        <p class="subtitle">
+          Faz upload do SAFT XML, executa validação com checker Java e mostra erros, avisos ou sucesso.
+        </p>
+      </header>
+
+      <section class="panel">
+        <form id="validateForm" class="validate-form">
+          <label for="xmlFile" class="file-label">Ficheiro XML SAFT</label>
+          <input id="xmlFile" name="xmlFile" type="file" accept=".xml,text/xml,application/xml" required />
+
+          <button type="submit" id="validateButton">Validar</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Resultado</h2>
+        <pre id="resultBox" class="result-box">Sem validações ainda.</pre>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+  </html>
