@@ -1,22 +1,43 @@
-const fs = require("fs/promises");
-const path = require("path");
-const config = require("./config");
-const { ensureDir } = require("./storage");
+const { all, run } = require("./db");
 
 const formatDate = () => new Date().toISOString();
 
 const logLine = async (level, message, meta = {}) => {
-  const line = {
-    timestamp: formatDate(),
-    level,
-    message,
-    ...meta
-  };
+  const timestamp = formatDate();
+  await run(
+    `INSERT INTO logs (timestamp, level, message, meta) VALUES (?, ?, ?, ?)`,
+    [timestamp, level, message, JSON.stringify(meta || {})]
+  );
+};
 
-  const logText = `${JSON.stringify(line)}\n`;
-  const filePath = path.join(config.logsDir, "app.log");
-  await ensureDir(config.logsDir);
-  await fs.appendFile(filePath, logText, "utf-8");
+const formatLogText = (row) => {
+  let parsedMeta = {};
+  try {
+    parsedMeta = row.meta ? JSON.parse(row.meta) : {};
+  } catch {
+    parsedMeta = { rawMeta: row.meta };
+  }
+
+  return JSON.stringify({
+    timestamp: row.timestamp,
+    level: row.level,
+    message: row.message,
+    ...parsedMeta
+  });
+};
+
+const readLogsAsText = async (limit = 500) => {
+  const rows = await all(
+    `
+      SELECT timestamp, level, message, meta
+      FROM logs
+      ORDER BY id DESC
+      LIMIT ?
+    `,
+    [limit]
+  );
+
+  return rows.reverse().map(formatLogText).join("\n");
 };
 
 const logger = {
@@ -31,7 +52,8 @@ const logger = {
   error: async (message, meta) => {
     console.error(`[ERROR] ${message}`);
     await logLine("error", message, meta);
-  }
+  },
+  readLogsAsText
 };
 
 module.exports = logger;

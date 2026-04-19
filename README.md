@@ -13,11 +13,12 @@ Pagina interna para validar ficheiros SAFT XML atraves de um validador Java (`.j
 - Upload de ficheiros XML
 - Execucao de checker SAFT em `.jar`
 - Resultado de validacao com erros, avisos e output bruto
+- Painéis de histórico e logs visíveis na UI
 - Atualizacao automatica do checker (startup + intervalo)
 - Atualizacao baseada em jars locais por versao no nome do ficheiro
 - Verificacao de compatibilidade Java (minimo configuravel)
 - Fallback para versao anterior do `.jar` em caso de falha
-- Logs de execucao e historico das ultimas 100 validacoes
+- Logs de execucao e historico das ultimas 100 validacoes (persistidos em SQLite)
 
 ## Estrutura
 
@@ -26,6 +27,10 @@ Pagina interna para validar ficheiros SAFT XML atraves de um validador Java (`.j
 - `src/validator.js`: execucao do checker e parsing de output
 - `public/`: UI web simples
 - `Dockerfile` e `docker-compose.yml`: ambiente isolado
+
+## Requisitos
+
+- Node.js 22+ (usa `node:sqlite` para persistência em SQLite)
 
 ## Configuracao
 
@@ -52,12 +57,14 @@ docker compose up --build
 
 Aplicacao disponivel em `http://localhost:3000`.
 
+A persistência de logs e histórico é feita no ficheiro SQLite `data/app.db`.
+
 ## API
 
 - `GET /api/health`: estado do servico + meta do checker
 - `POST /api/validate`: upload (`xmlFile`) e validacao
-- `GET /api/history`: historico de validacoes
-- `GET /api/logs`: logs de execucao
+- `GET /api/history`: historico de validacoes (SQLite)
+- `GET /api/logs`: logs de execucao (SQLite)
 
 ## Fluxo de atualizacao do checker
 
