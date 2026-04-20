@@ -14,6 +14,43 @@ const prevJarPath = path.join(oldCheckerDirPath, PREV_JAR_NAME);
 const seedJarNamePattern = /^FACTEMICLI-(.+)-cmdClient\.jar$/i;
 const embeddedVersionedJarPattern = /(FACTEMICLI-.+-cmdClient\.jar)/i;
 
+const isFileBusyError = (error) => {
+  if (!error) {
+    return false;
+  }
+  return ["EBUSY", "EPERM", "EACCES"].includes(error.code);
+};
+
+const removeOrArchiveArtifact = async (artifactPath) => {
+  try {
+    await fs.rm(artifactPath, { force: true });
+    return;
+  } catch (error) {
+    if (!isFileBusyError(error)) {
+      throw error;
+    }
+  }
+
+  await ensureDir(oldCheckerDirPath);
+  const archiveTarget = path.join(
+    oldCheckerDirPath,
+    `${path.basename(artifactPath)}.stale-${Date.now()}`
+  );
+
+  try {
+    await fs.rename(artifactPath, archiveTarget);
+    await logger.warn("Artefacto antigo ocupado; movido para arquivo stale.", {
+      from: artifactPath,
+      to: archiveTarget
+    });
+  } catch (renameError) {
+    await logger.warn("Artefacto antigo ocupado e nao removivel no momento.", {
+      path: artifactPath,
+      reason: renameError.message
+    });
+  }
+};
+
 const readMeta = async () => {
   return readJsonFile(metaPath, {
     version: "",
@@ -125,21 +162,21 @@ const installSeedJarIfMissing = async () => {
     return false;
   }
 
-  const seedCandidates = await listJarCandidates(config.checkerSeedDir);
-  const newestSeed = pickNewestJar(seedCandidates);
-  if (!newestSeed) {
-    throw new Error("Nenhum jar encontrado na pasta de seed.");
+  const checkerCandidates = await listAllJarCandidates();
+  const newestCandidate = pickNewestJar(checkerCandidates);
+  if (!newestCandidate) {
+    throw new Error("Nenhum jar encontrado nas pastas configuradas.");
   }
 
-  await fs.copyFile(newestSeed.filePath, activeJarPath);
+  await fs.copyFile(newestCandidate.filePath, activeJarPath);
   const meta = {
-    version: newestSeed.name,
+    version: newestCandidate.name,
     hash: "",
     lastUpdate: new Date().toISOString()
   };
   await persistMeta(meta);
-  await logger.info("Checker inicial instalado a partir do jar local.", {
-    seedJar: newestSeed.name
+  await logger.info("Checker inicial instalado a partir do jar local mais recente.", {
+    jar: newestCandidate.name
   });
   return true;
 };
@@ -157,7 +194,7 @@ const switchToCandidate = async (candidateName, candidatePath, currentVersionNam
   const candidateBaseName = path.basename(candidatePath).replace(/[\uF000-\uF8FF]/g, "?");
   const candidateHasWrapperName = candidateBaseName !== candidateName;
   if (candidateHasWrapperName) {
-    await fs.rm(candidatePath, { force: true });
+    await removeOrArchiveArtifact(candidatePath);
   }
 
   const meta = {
@@ -263,7 +300,9 @@ const normalizeRuntimeArtifacts = async () => {
   for (const artifact of artifacts) {
     const normalizedPath = path.join(config.checkerDir, artifact.name);
     await fs.copyFile(artifact.filePath, normalizedPath);
-    await fs.rm(artifact.filePath, { force: true });
+    if (artifact.filePath !== normalizedPath) {
+      await removeOrArchiveArtifact(artifact.filePath);
+    }
   }
 };
 

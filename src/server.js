@@ -1,9 +1,9 @@
-const path = require("path");
 const fs = require("fs/promises");
+const path = require("path");
 const express = require("express");
 const config = require("./config");
 const logger = require("./logger");
-const { ensureDir, ensureFile } = require("./storage");
+const { ensureDir } = require("./storage");
 const { assertJavaCompatibility } = require("./java");
 const { ensureCheckerUpdated, readMeta } = require("./checkerUpdater");
 const { validateWithFallback } = require("./validator");
@@ -35,8 +35,7 @@ app.get("/api/history", async (req, res) => {
 });
 
 app.get("/api/logs", async (req, res) => {
-  const logFile = path.join(config.logsDir, "app.log");
-  const logs = await fs.readFile(logFile, "utf-8").catch(() => "");
+  const logs = await logger.readLogsAsText();
   res.type("text/plain").send(logs);
 });
 
@@ -49,6 +48,7 @@ app.post("/api/validate", upload.single("xmlFile"), async (req, res) => {
   const context = parseValidationContext(req.body);
   const contextValidationError = validateValidationContext(context);
   if (contextValidationError) {
+    await fs.unlink(req.file.path).catch(() => undefined);
     res.status(400).json({ error: contextValidationError });
     return;
   }
@@ -117,9 +117,7 @@ app.use(uploadErrorHandler);
 
 const setup = async () => {
   await ensureDir(config.uploadDir);
-  await ensureDir(config.logsDir);
   await ensureDir(config.checkerDir);
-  await ensureFile(config.historyFile, '{"validations":[]}\n');
 };
 
 const boot = async () => {

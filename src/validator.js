@@ -7,7 +7,6 @@ const {
   backupActiveJar,
   ensureCheckerUpdated,
   getActiveJarPath,
-  getPreviousJarPath,
   rollback
 } = require("./checkerUpdater");
 
@@ -51,6 +50,11 @@ const requiresJarUpdate = (stdout, stderr) => {
     /obten[cç][aã]o do jar com a nova vers[aã]o/i.test(full) ||
     /code\s*=\s*"-9"/i.test(full)
   );
+};
+
+const isMissingJarError = (message, stdout, stderr) => {
+  const full = `${message || ""}\n${stdout || ""}\n${stderr || ""}`;
+  return /Unable to access jarfile/i.test(full);
 };
 
 const outputFromError = (error) => ({
@@ -119,6 +123,19 @@ const runWithAutoUpdate = async (jarPath, xmlPath, options) => {
     return rerun.result;
   } catch (error) {
     const { stdout, stderr } = outputFromError(error);
+    if (isMissingJarError(error?.message, stdout, stderr)) {
+      await logger.warn("Jar ativo indisponivel; a reconstruir estado do checker e repetir.", {
+        reason: error.message
+      });
+      await ensureCheckerUpdated();
+      try {
+        const rerun = await runAndParse(getActiveJarPath(), xmlPath, options);
+        return rerun.result;
+      } catch (rerunError) {
+        throw new Error(`Falha apos reconstruir jar ativo: ${rerunError.message}`);
+      }
+    }
+
     if (!requiresJarUpdate(stdout, stderr)) {
       throw error;
     }
@@ -151,7 +168,7 @@ const validateWithFallback = async (xmlPath, options) => {
     await rollback();
 
     try {
-      const result = await runWithAutoUpdate(getPreviousJarPath(), xmlPath, options);
+      const result = await runWithAutoUpdate(getActiveJarPath(), xmlPath, options);
       return {
         usedFallback: true,
         ...result
