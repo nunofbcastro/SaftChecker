@@ -162,21 +162,21 @@ const installSeedJarIfMissing = async () => {
     return false;
   }
 
-  const seedCandidates = await listJarCandidates(config.checkerSeedDir);
-  const newestSeed = pickNewestJar(seedCandidates);
-  if (!newestSeed) {
-    throw new Error("Nenhum jar encontrado na pasta de seed.");
+  const checkerCandidates = await listAllJarCandidates();
+  const newestCandidate = pickNewestJar(checkerCandidates);
+  if (!newestCandidate) {
+    throw new Error("Nenhum jar encontrado nas pastas configuradas.");
   }
 
-  await fs.copyFile(newestSeed.filePath, activeJarPath);
+  await fs.copyFile(newestCandidate.filePath, activeJarPath);
   const meta = {
-    version: newestSeed.name,
+    version: newestCandidate.name,
     hash: "",
     lastUpdate: new Date().toISOString()
   };
   await persistMeta(meta);
-  await logger.info("Checker inicial instalado a partir do jar local.", {
-    seedJar: newestSeed.name
+  await logger.info("Checker inicial instalado a partir do jar local mais recente.", {
+    jar: newestCandidate.name
   });
   return true;
 };

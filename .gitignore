@@ -6,11 +6,8 @@ pnpm-debug.log*
 
 package-lock.json
 
-data/uploads/
-data/logs/
-data/history.json
-!data/checker/.gitkeep
-data/checker/old/
+!data/checker
+data/
 
 .DS_Store
 Thumbs.db
