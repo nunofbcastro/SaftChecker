@@ -1,11 +1,13 @@
 const multer = require("multer");
+const { randomUUID } = require("crypto");
 const config = require("../config");
 const { ensureDir } = require("../storage");
 
 const allowedXmlMimeTypes = new Set([
   "application/xml",
   "text/xml",
-  "application/xhtml+xml"
+  "application/xhtml+xml",
+  "application/octet-stream"
 ]);
 
 const MAX_UPLOAD_BYTES = config.maxUploadSizeMb * 1024 * 1024;
@@ -22,7 +24,7 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     const timestamp = Date.now();
     const safeName = file.originalname.replace(/[^a-zA-Z0-9_.-]/g, "_");
-    cb(null, `${timestamp}-${safeName}`);
+    cb(null, `${timestamp}-${randomUUID()}-${safeName}`);
   }
 });
 

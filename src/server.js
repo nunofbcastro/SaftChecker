@@ -1,5 +1,6 @@
 const fs = require("fs/promises");
 const path = require("path");
+const { randomUUID } = require("crypto");
 const express = require("express");
 const config = require("./config");
 const logger = require("./logger");
@@ -9,6 +10,7 @@ const { ensureCheckerUpdated, readMeta } = require("./checkerUpdater");
 const { validateWithFallback } = require("./validator");
 const { getHistory, addValidationRecord } = require("./history");
 const { upload, uploadErrorHandler } = require("./middleware/upload");
+const { ValidationQueue } = require("./validationQueue");
 const {
   parseValidationContext,
   validateValidationContext,
@@ -16,6 +18,10 @@ const {
 } = require("./services/validationService");
 
 const app = express();
+const validationQueue = new ValidationQueue({
+  concurrency: config.maxConcurrentValidations,
+  maxQueueSize: config.validationQueueLimit
+});
 
 app.use(express.json());
 app.use(express.static(path.join(process.cwd(), "public")));
@@ -25,7 +31,8 @@ app.get("/api/health", async (req, res) => {
   const checkerMeta = await readMeta();
   res.json({
     ok: true,
-    checker: checkerMeta
+    checker: checkerMeta,
+    queue: validationQueue.getMetrics()
   });
 });
 
@@ -54,49 +61,65 @@ app.post("/api/validate", upload.single("xmlFile"), async (req, res) => {
   }
 
   const xmlPath = req.file.path;
-  const startedAt = new Date();
+
   try {
-    if (req.file.size <= 0) {
-      throw new Error("Ficheiro vazio. Envie um XML valido.");
-    }
+    const response = await validationQueue.enqueue(async () => {
+      const startedAt = new Date();
 
-    const xmlSignatureValid = await looksLikeXmlFile(xmlPath);
-    if (!xmlSignatureValid) {
-      throw new Error("Conteudo invalido. O ficheiro nao parece ser XML.");
-    }
+      if (req.file.size <= 0) {
+        throw new Error("Ficheiro vazio. Envie um XML valido.");
+      }
 
-    const result = await validateWithFallback(xmlPath, {
-      nif: context.nif,
-      password: context.password,
-      ano: context.ano,
-      mes: context.mes
+      const xmlSignatureValid = await looksLikeXmlFile(xmlPath);
+      if (!xmlSignatureValid) {
+        throw new Error("Conteudo invalido. O ficheiro nao parece ser XML.");
+      }
+
+      const result = await validateWithFallback(xmlPath, {
+        nif: context.nif,
+        password: context.password,
+        ano: context.ano,
+        mes: context.mes
+      });
+      const record = {
+        id: randomUUID(),
+        fileName: req.file.originalname,
+        savedFileName: req.file.filename,
+        startedAt: startedAt.toISOString(),
+        finishedAt: new Date().toISOString(),
+        status: result.status,
+        usedFallback: result.usedFallback,
+        errorsCount: result.errors.length,
+        warningsCount: result.warnings.length
+      };
+      await addValidationRecord(record);
+      await logger.info("Validacao SAFT concluida.", record);
+
+      return {
+        ...record,
+        output: result.output,
+        errors: result.errors,
+        warnings: result.warnings
+      };
     });
-    const record = {
-      id: `${Date.now()}`,
-      fileName: req.file.originalname,
-      savedFileName: req.file.filename,
-      startedAt: startedAt.toISOString(),
-      finishedAt: new Date().toISOString(),
-      status: result.status,
-      usedFallback: result.usedFallback,
-      errorsCount: result.errors.length,
-      warningsCount: result.warnings.length
-    };
-    await addValidationRecord(record);
-    await logger.info("Validacao SAFT concluida.", record);
 
-    res.json({
-      ...record,
-      output: result.output,
-      errors: result.errors,
-      warnings: result.warnings
-    });
+    res.json(response);
   } catch (error) {
+    if (error?.code === "QUEUE_FULL") {
+      await logger.warn("Pedido rejeitado por fila cheia.", {
+        fileName: req.file.originalname,
+        ...validationQueue.getMetrics()
+      });
+      res.set("Retry-After", "60");
+      res.status(503).json({ error: error.message });
+      return;
+    }
+
     const record = {
-      id: `${Date.now()}`,
+      id: randomUUID(),
       fileName: req.file.originalname,
       savedFileName: req.file.filename,
-      startedAt: startedAt.toISOString(),
+      startedAt: new Date().toISOString(),
       finishedAt: new Date().toISOString(),
       status: "error",
       usedFallback: false,
@@ -142,9 +165,13 @@ const boot = async () => {
     });
   }
 
-  app.listen(config.port, async () => {
+  const server = app.listen(config.port, async () => {
     await logger.info(`Servidor SAFT Checker online na porta ${config.port}.`);
   });
+
+  server.requestTimeout = config.serverRequestTimeoutMs;
+  server.headersTimeout = Math.max(60_000, config.serverRequestTimeoutMs + 1_000);
+  server.keepAliveTimeout = 60_000;
 };
 
 boot().catch(async (error) => {

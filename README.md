@@ -46,6 +46,11 @@ cp .env.example .env
 - `CHECKER_DIR`: pasta de runtime onde fica o jar ativo (`saft-checker.jar`)
 - `SAFT_NIF`: NIF usado automaticamente na validacao
 - `SAFT_PASSWORD`: password usada automaticamente na validacao
+- `MAX_UPLOAD_MB`: tamanho maximo por upload (exemplo recomendado para ficheiros grandes: `1024`)
+- `MAX_CONCURRENT_VALIDATIONS`: numero maximo de validacoes em paralelo (default `3`)
+- `VALIDATION_QUEUE_LIMIT`: tamanho maximo da fila interna antes de devolver `503`
+- `REQUEST_TIMEOUT_MS`: timeout de execucao do checker Java por pedido
+- `SERVER_REQUEST_TIMEOUT_MS`: timeout HTTP do servidor para uploads/validacoes longas
 
 O sistema arranca com o jar mais recente encontrado localmente e faz update quando encontra uma versao mais nova nas pastas de jars.
 
