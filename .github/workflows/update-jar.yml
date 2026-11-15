@@ -93,6 +93,7 @@ jobs:
           name=$(basename "$new")
 
           git rm -q --ignore-unmatch data/checker/FACTEMICLI-*-cmdClient.jar
+          mkdir -p data/checker
           cp "$new" "data/checker/$name"
           git add -f "data/checker/$name"
 
