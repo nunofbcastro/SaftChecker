@@ -62,16 +62,29 @@ jobs:
             -i "$RUNNER_TEMP/probe/probe.xml" \
             -n "$SAFT_NIF" -p "$SAFT_PASSWORD" -a 2025 -m 01 -op validar || true
 
-          new=$(ls "$RUNNER_TEMP"/new/FACTEMICLI-*-cmdClient.jar 2>/dev/null | head -n 1 || true)
-          if [ -z "$new" ]; then
+          # Em Linux o jar grava o ficheiro com um prefixo estranho no nome (ex.: "\FACTEMICLI-...jar"),
+          # por isso procuramos com "*" a frente e normalizamos o nome.
+          raw=$(find "$RUNNER_TEMP/new" -maxdepth 1 -type f -name '*FACTEMICLI-*-cmdClient.jar' | head -n 1)
+          if [ -z "$raw" ]; then
             echo "Sem versao nova."
             echo "updated=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          unzip -tq "$new"   # falha o job se o jar vier corrompido
+          name=$(basename "$raw" | grep -o 'FACTEMICLI-.*-cmdClient\.jar')
+          mkdir -p "$RUNNER_TEMP/clean"
+          cp "$raw" "$RUNNER_TEMP/clean/$name"
+
+          unzip -tq "$RUNNER_TEMP/clean/$name"   # falha o job se o jar vier corrompido
+
+          if [ "$(printf '%s\n%s\n' "$(basename "$current")" "$name" | sort -V | tail -n 1)" = "$(basename "$current")" ]; then
+            echo "O jar descarregado ($name) nao e mais novo que o atual."
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           echo "updated=true" >> "$GITHUB_OUTPUT"
-          echo "new=$new" >> "$GITHUB_OUTPUT"
+          echo "new=$RUNNER_TEMP/clean/$name" >> "$GITHUB_OUTPUT"
 
       - name: Commit do jar novo
         if: steps.fetch.outputs.updated == 'true'
